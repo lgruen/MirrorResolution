@@ -62,6 +62,14 @@ namespace MirrorResolution
                 {
                     return false;
                 }
+
+                if (split)
+                {
+                    // Round the size up to 128 px steps so the temporary texture pool sees few distinct sizes
+                    // while the head moves.
+                    Grow(ref px0, ref px1, width);
+                    Grow(ref py0, ref py1, height);
+                }
             }
 
             bool partial = px0 > 0 || py0 > 0 || px1 < width || py1 < height;
@@ -70,13 +78,16 @@ namespace MirrorResolution
                 Plugin.Log.Info($"ClipToMirror eye x{screenRect.x:0.0}: {px1 - px0}x{py1 - py0} of {width}x{height} px ({(float)(px1 - px0) * (py1 - py0) / (width * height):P1})");
             }
             Rect area = Rect.MinMaxRect(px0 * 2f / width - 1f, py0 * 2f / height - 1f, px1 * 2f / width - 1f, py1 * 2f / height - 1f);
+            int rw = px1 - px0, rh = py1 - py0;
             int msaa = Mathf.Max(1, EyeAntiAliasing);
             var camera = ____mirrorCamera;
-            var eye = split ? RenderTexture.GetTemporary(width, height, 24, target.format, RenderTextureReadWrite.Default, msaa) : target;
-            Rect eyeRect = split ? new Rect(0f, 0f, 1f, 1f) : screenRect;
+            // With SplitEyes the area gets a texture of exactly its size. (A viewport inside a bigger texture makes
+            // a tiled GPU load the rest of the multisampled surface instead of just clearing it, which can cost more
+            // than the pixels saved.) Without SplitEyes the viewport shrinks inside the game's side-by-side texture.
+            var eye = split ? RenderTexture.GetTemporary(rw, rh, 24, target.format, RenderTextureReadWrite.Default, msaa) : target;
             camera.targetTexture = eye;
-            camera.rect = new Rect(eyeRect.x + eyeRect.width * px0 / width, eyeRect.y + eyeRect.height * py0 / height,
-                eyeRect.width * (px1 - px0) / width, eyeRect.height * (py1 - py0) / height);
+            camera.rect = split ? new Rect(0f, 0f, 1f, 1f) : new Rect(screenRect.x + screenRect.width * px0 / width,
+                screenRect.y + screenRect.height * py0 / height, screenRect.width * rw / width, screenRect.height * rh / height);
             camera.projectionMatrix = projection;
             Matrix4x4 reflection = ReflectionMatrix(Plane(planePos, planeNormal));
             camera.ResetWorldToCameraMatrix();
@@ -91,22 +102,30 @@ namespace MirrorResolution
                 return false;
             }
 
-            int dstX = screenRect.x > 0.25f ? width : 0;
+            // Texture coordinates here start at the bottom left, like the viewport rectangle.
+            int dstX = (screenRect.x > 0.25f ? width : 0) + px0;
             if (msaa > 1)
             {
-                var resolved = RenderTexture.GetTemporary(width, height, 0, target.format, RenderTextureReadWrite.Default, 1);
+                var resolved = RenderTexture.GetTemporary(rw, rh, 0, target.format, RenderTextureReadWrite.Default, 1);
                 eye.ResolveAntiAliasedSurface(resolved);
-                Graphics.CopyTexture(resolved, 0, 0, 0, 0, width, height, target, 0, 0, dstX, 0);
+                Graphics.CopyTexture(resolved, 0, 0, 0, 0, rw, rh, target, 0, 0, dstX, py0);
                 RenderTexture.ReleaseTemporary(resolved);
             }
             else
             {
-                Graphics.CopyTexture(eye, 0, 0, 0, 0, width, height, target, 0, 0, dstX, 0);
+                Graphics.CopyTexture(eye, 0, 0, 0, 0, rw, rh, target, 0, 0, dstX, py0);
             }
 
             camera.targetTexture = target;
             RenderTexture.ReleaseTemporary(eye);
             return false;
+        }
+
+        private static void Grow(ref int lo, ref int hi, int size)
+        {
+            int want = Mathf.Min(size, (hi - lo + 127) / 128 * 128);
+            lo = Mathf.Clamp(lo - (want - (hi - lo)) / 2, 0, size - want);
+            hi = lo + want;
         }
 
         // Standard planar mirror math: reflection about the plane, oblique near plane.
