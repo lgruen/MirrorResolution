@@ -8,6 +8,7 @@ namespace MirrorResolution
     // half-width viewport. On the Frame's tiled GPU each of those passes still loads and stores the whole
     // double-wide surface and bins every tile. With SplitEyes, each eye renders into its own texture of
     // exactly its size, which is then resolved (MSAA) and copied into its half of the side-by-side texture.
+    // With ClipToMirror (MirrorClip) only the part of each eye's view covered by the mirror is rendered.
     [HarmonyPatch(typeof(MirrorRendererSO), "RenderMirror")]
     internal static class MirrorSplit
     {
@@ -19,7 +20,14 @@ namespace MirrorResolution
             var config = PluginConfig.Instance;
             Rect screenRect = __3;
             RenderTexture? target = ____mirrorCamera.targetTexture;
-            if (!config.Enabled || !config.SplitEyes || target == null || Mathf.Abs(screenRect.width - 0.5f) > 0.01f || target.antiAliasing > 1)
+            if (!config.Enabled || target == null)
+            {
+                return true;
+            }
+
+            bool split = config.SplitEyes && Mathf.Abs(screenRect.width - 0.5f) <= 0.01f && target.antiAliasing <= 1;
+            bool clip = config.ClipToMirror;
+            if (!split && !clip)
             {
                 return true;
             }
@@ -27,21 +35,52 @@ namespace MirrorResolution
             Vector3 camPosition = __0, planePos = __4, planeNormal = __5;
             Quaternion camRotation = __1;
             Matrix4x4 projection = __2;
-            int width = target.width / 2, height = target.height;
-            int msaa = Mathf.Max(1, EyeAntiAliasing);
 
-            var eye = RenderTexture.GetTemporary(width, height, 24, target.format, RenderTextureReadWrite.Default, msaa);
+            // Pixel area of this eye's reflection to render: all of it, or (ClipToMirror) the mirrors' screen
+            // rectangle plus a margin for the mirror shader's normal-map offset; nothing if no mirror is in view.
+            int width = split ? target.width / 2 : Mathf.RoundToInt(target.width * screenRect.width);
+            int height = split ? target.height : Mathf.RoundToInt(target.height * screenRect.height);
+            int px0 = 0, py0 = 0, px1 = width, py1 = height;
+            if (clip && MirrorClip.MirrorBounds(out Bounds mirrors))
+            {
+                if (!MirrorClip.ScreenRect(mirrors, camPosition, camRotation, projection, out Rect ndc))
+                {
+                    return false;
+                }
+
+                const float margin = 0.05f;
+                px0 = Mathf.Clamp(Mathf.FloorToInt((ndc.xMin - margin + 1f) * 0.5f * width), 0, width);
+                px1 = Mathf.Clamp(Mathf.CeilToInt((ndc.xMax + margin + 1f) * 0.5f * width), 0, width);
+                py0 = Mathf.Clamp(Mathf.FloorToInt((ndc.yMin - margin + 1f) * 0.5f * height), 0, height);
+                py1 = Mathf.Clamp(Mathf.CeilToInt((ndc.yMax + margin + 1f) * 0.5f * height), 0, height);
+                if (px1 <= px0 || py1 <= py0)
+                {
+                    return false;
+                }
+            }
+
+            bool partial = px0 > 0 || py0 > 0 || px1 < width || py1 < height;
+            Rect area = Rect.MinMaxRect(px0 * 2f / width - 1f, py0 * 2f / height - 1f, px1 * 2f / width - 1f, py1 * 2f / height - 1f);
+            int msaa = Mathf.Max(1, EyeAntiAliasing);
             var camera = ____mirrorCamera;
+            var eye = split ? RenderTexture.GetTemporary(width, height, 24, target.format, RenderTextureReadWrite.Default, msaa) : target;
+            Rect eyeRect = split ? new Rect(0f, 0f, 1f, 1f) : screenRect;
             camera.targetTexture = eye;
-            camera.rect = new Rect(0f, 0f, 1f, 1f);
+            camera.rect = new Rect(eyeRect.x + eyeRect.width * px0 / width, eyeRect.y + eyeRect.height * py0 / height,
+                eyeRect.width * (px1 - px0) / width, eyeRect.height * (py1 - py0) / height);
             camera.projectionMatrix = projection;
             Matrix4x4 reflection = ReflectionMatrix(Plane(planePos, planeNormal));
             camera.ResetWorldToCameraMatrix();
             camera.transform.SetPositionAndRotation(camPosition, camRotation);
             Matrix4x4 worldToCamera = camera.worldToCameraMatrix * reflection;
             camera.worldToCameraMatrix = worldToCamera;
-            camera.projectionMatrix = camera.CalculateObliqueMatrix(CameraSpacePlane(worldToCamera, planePos, planeNormal));
+            Matrix4x4 oblique = camera.CalculateObliqueMatrix(CameraSpacePlane(worldToCamera, planePos, planeNormal));
+            camera.projectionMatrix = partial ? MirrorClip.SubProjection(oblique, area) : oblique;
             camera.Render();
+            if (!split)
+            {
+                return false;
+            }
 
             int dstX = screenRect.x > 0.25f ? width : 0;
             if (msaa > 1)
