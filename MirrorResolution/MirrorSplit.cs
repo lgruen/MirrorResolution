@@ -45,6 +45,11 @@ namespace MirrorResolution
             {
                 if (!MirrorClip.ScreenRect(mirrors, camPosition, camRotation, projection, out Rect ndc))
                 {
+                    if (Time.frameCount % 600 == 0)
+                    {
+                        Plugin.Log.Info($"ClipToMirror eye x{screenRect.x:0.0}: no mirror in view, nothing rendered");
+                    }
+
                     return false;
                 }
 
@@ -60,6 +65,10 @@ namespace MirrorResolution
             }
 
             bool partial = px0 > 0 || py0 > 0 || px1 < width || py1 < height;
+            if (clip && Time.frameCount % 600 == 0)
+            {
+                Plugin.Log.Info($"ClipToMirror eye x{screenRect.x:0.0}: {px1 - px0}x{py1 - py0} of {width}x{height} px ({(float)(px1 - px0) * (py1 - py0) / (width * height):P1})");
+            }
             Rect area = Rect.MinMaxRect(px0 * 2f / width - 1f, py0 * 2f / height - 1f, px1 * 2f / width - 1f, py1 * 2f / height - 1f);
             int msaa = Mathf.Max(1, EyeAntiAliasing);
             var camera = ____mirrorCamera;
