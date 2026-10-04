@@ -25,9 +25,22 @@ Off and Low (the "fake mirror") are not affected.
 The game renders the two eyes as two camera renders with half-width viewports into the shared texture.
 On a tiled GPU each render is a pass over the whole double-wide surface (load, store, binning), so the
 mirror costs about twice what it should, more with MSAA. With `SplitEyes` each eye renders into a texture
-of its own size, is resolved, and is copied into its half. On a Steam Frame (Adreno 750, Turnip; 2736² eye,
-mirror 1620² per eye, 2× MSAA) the game's GPU time went from 9.63 to 7.11 ms per frame. On desktop GPUs
-expect little difference.
+of its own size, is resolved, and is copied into its half. On desktop GPUs expect little difference.
+
+Steam Frame (Adreno 750, Turnip; 2736² eye, mirror 1620² per eye), game GPU ms/frame:
+
+| | The Sun 0:30–1:00 | A Cookie From Space E+ 1:00–1:30 |
+|---|---|---|
+| unsplit, MSAA 2× | 9.63 | |
+| SplitEyes, MSAA 2× (0.3.1) | 7.69 / 7.66 | 20.32 / 20.41 |
+| SplitEyes, MSAA 1× | 7.27 | 18.63 |
+| SplitEyes, MSAA 2× (0.3.0, black reflection, see below) | 7.12 | 19.86 |
+
+0.3.0 resolved the multisampled eye texture with `ResolveAntiAliasedSurface(other)`, which leaves the other
+texture black on this setup (Proton/DXVK): with MSAA 2× the reflection was empty. 0.3.1 resolves with a blit.
+
+`MIRROR_DUMP=<seconds>` (environment) saves the reflection textures `<seconds>` into a level as
+`bench_shot_*.png` in the game folder.
 
 ## Build
 

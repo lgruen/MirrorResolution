@@ -3,7 +3,7 @@
   "id": "MirrorResolution",
   "name": "MirrorResolution",
   "author": "MirrorResolution contributors",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Renders the Medium/High mirror at the headset's eye resolution (times a scale) instead of the fixed 1200x1000 / 600x500 per eye.",
   "gameVersion": "1.44.1",
   "dependsOn": { "BSIPA": "^4.3.7" }

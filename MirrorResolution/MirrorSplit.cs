@@ -46,8 +46,15 @@ namespace MirrorResolution
             int dstX = screenRect.x > 0.25f ? width : 0;
             if (msaa > 1)
             {
+                // ResolveAntiAliasedSurface(resolved) leaves `resolved` black here (Steam Frame, DXVK); sampling
+                // the multisampled texture in a blit resolves it correctly.
                 var resolved = RenderTexture.GetTemporary(width, height, 0, target.format, RenderTextureReadWrite.Default, 1);
-                eye.ResolveAntiAliasedSurface(resolved);
+                Graphics.Blit(eye, resolved);
+                if (MirrorDebug.Dumping)
+                {
+                    MirrorDebug.Capture(resolved, screenRect.x > 0.25f ? "split_r" : "split_l");
+                }
+
                 Graphics.CopyTexture(resolved, 0, 0, 0, 0, width, height, target, 0, 0, dstX, 0);
                 RenderTexture.ReleaseTemporary(resolved);
             }
