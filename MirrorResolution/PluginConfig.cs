@@ -29,5 +29,9 @@ namespace MirrorResolution
         // Render only the part of each eye's reflection that the mirror covers on screen (nothing when the
         // floor mirror is out of view). Same pixels where the mirror is. Experimental.
         public virtual bool ClipToMirror { get; set; } = false;
+
+        // Within that, keep the scene out of the pixels outside the mirrors' footprint (depth-masked before the
+        // reflection renders, so they are never shaded). Same pixels where the mirror is. Experimental.
+        public virtual bool FootprintMask { get; set; } = false;
     }
 }

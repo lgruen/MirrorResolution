@@ -87,6 +87,16 @@ namespace MirrorResolution
             return _audio == null ? -1f : _audio.songTime - _audio.startSongTime;
         }
 
+        // Logs the rendered rectangle and the footprint polygons (grown by the margin, and exact) in pixels of the
+        // eye's full reflection (origin bottom left).
+        internal static void LogFootprint(string eye, int px0, int py0, int px1, int py1, int width, int height,
+            System.Collections.Generic.List<Vector2> grown, System.Collections.Generic.List<Vector2> exact)
+        {
+            string Pixels(System.Collections.Generic.List<Vector2> polygon) => string.Join(" ", polygon.ConvertAll(p =>
+                string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:F1},{1:F1}", (p.x + 1f) * 0.5f * width, (p.y + 1f) * 0.5f * height)));
+            Plugin.Log.Info($"MIRRORDUMP eye={eye} size={width}x{height} rect={px0},{py0},{px1},{py1} grown={Pixels(grown)} exact={Pixels(exact)}");
+        }
+
         // Copies a texture (or one layer of an array) now and saves it as bench_shot_<name>.png once read back;
         // logs the mean colour. Sources must not be multisampled.
         internal static void Capture(Texture source, string name, int element = 0)

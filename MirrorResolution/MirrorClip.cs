@@ -6,23 +6,24 @@ namespace MirrorResolution
 {
     // The reflection texture is sampled at the mirror's own screen position, so only the part of each eye's view
     // that the mirror covers is ever seen. The game renders the whole reflected view at full resolution anyway
-    // (looking ahead, the floor mirror is mostly or completely out of view). This finds the screen rectangle of all
-    // active mirrors for one eye; MirrorRender then renders just that rectangle with a matching off-centre
-    // projection, which gives the same pixels there (and lets Unity cull everything outside it).
+    // (looking ahead, the floor mirror is mostly or completely out of view). This finds, for one eye, a convex
+    // polygon on screen that covers all active mirrors (their footprint); MirrorSplit renders just its bounding
+    // rectangle (ClipToMirror) and MirrorMask keeps the scene out of the rest of that rectangle (FootprintMask).
     internal static class MirrorClip
     {
         private static readonly AccessTools.FieldRef<Mirror, MeshRenderer> MirrorRenderer =
             AccessTools.FieldRefAccess<Mirror, MeshRenderer>("_renderer");
 
         private static readonly List<(Mirror Mirror, MeshRenderer Renderer)> Mirrors = new List<(Mirror, MeshRenderer)>();
+        private static readonly List<Bounds> Boxes = new List<Bounds>();
+        private static readonly List<Vector2> Points = new List<Vector2>();
+        private static readonly Vector4[] Clip = new Vector4[8];
         private static int _listFrame = -1000;
         private static int _frame = -1;
-        private static Bounds _bounds;
-        private static bool _any;
 
-        // Union of the bounds of every active mirror (all mirrors in a scene share one reflection texture). Looking
-        // the mirrors up scans every object, so the list is refreshed only every 90 frames.
-        internal static bool MirrorBounds(out Bounds bounds)
+        // World bounds of every active mirror (all mirrors in a scene share one reflection texture). Looking the
+        // mirrors up scans every object, so the list is refreshed only every 90 frames.
+        internal static List<Bounds> MirrorBoxes()
         {
             if (Time.frameCount != _frame)
             {
@@ -37,91 +38,123 @@ namespace MirrorResolution
                     }
                 }
 
-                _any = false;
+                Boxes.Clear();
                 foreach (var (mirror, renderer) in Mirrors)
                 {
-                    if (mirror == null || !mirror.isActiveAndEnabled || renderer == null || !renderer.enabled)
+                    if (mirror != null && mirror.isActiveAndEnabled && renderer != null && renderer.enabled)
                     {
-                        continue;
-                    }
-
-                    if (_any)
-                    {
-                        _bounds.Encapsulate(renderer.bounds);
-                    }
-                    else
-                    {
-                        _bounds = renderer.bounds;
-                        _any = true;
+                        Boxes.Add(renderer.bounds);
                     }
                 }
             }
 
-            bounds = _bounds;
-            return _any;
+            return Boxes;
         }
 
-        // Rectangle in normalized device coordinates (-1..1) covered by the box for an eye at position/rotation
-        // with the given projection; false if none of it is in view. The box is clipped against the eye plane, so
-        // corners behind the eye (the mirror under the player's feet) are handled.
-        internal static bool ScreenRect(Bounds box, Vector3 position, Quaternion rotation, Matrix4x4 projection, out Rect ndc)
+        // Convex polygon (counter-clockwise, normalized device coordinates of the eye, may reach far outside -1..1)
+        // that covers every box as seen by an eye at position/rotation with the given projection, grown by `margin`
+        // on each side; false if no box is in front of the eye. Boxes are clipped against the eye plane, so corners
+        // behind the eye (the mirror under the player's feet) are handled.
+        internal static bool Footprint(List<Bounds> boxes, Vector3 position, Quaternion rotation, Matrix4x4 projection,
+            float margin, List<Vector2> hull)
         {
-            ndc = default;
             Matrix4x4 view = Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * Matrix4x4.TRS(position, rotation, Vector3.one).inverse;
             Matrix4x4 viewProjection = projection * view;
-            var clip = new Vector4[8];
-            Vector3 min = box.min, max = box.max;
-            for (int i = 0; i < 8; i++)
-            {
-                var corner = new Vector3((i & 1) != 0 ? max.x : min.x, (i & 2) != 0 ? max.y : min.y, (i & 4) != 0 ? max.z : min.z);
-                clip[i] = viewProjection * new Vector4(corner.x, corner.y, corner.z, 1f);
-            }
-
             const float minW = 1e-4f;
-            float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue;
-            bool any = false;
-
-            void Add(Vector4 c)
+            Points.Clear();
+            foreach (var box in boxes)
             {
-                float x = c.x / c.w, y = c.y / c.w;
-                x0 = Mathf.Min(x0, x);
-                x1 = Mathf.Max(x1, x);
-                y0 = Mathf.Min(y0, y);
-                y1 = Mathf.Max(y1, y);
-                any = true;
-            }
-
-            for (int i = 0; i < 8; i++)
-            {
-                if (clip[i].w > minW)
+                Vector3 min = box.min, max = box.max;
+                for (int i = 0; i < 8; i++)
                 {
-                    Add(clip[i]);
+                    var corner = new Vector3((i & 1) != 0 ? max.x : min.x, (i & 2) != 0 ? max.y : min.y, (i & 4) != 0 ? max.z : min.z);
+                    Clip[i] = viewProjection * new Vector4(corner.x, corner.y, corner.z, 1f);
                 }
 
-                for (int bit = 1; bit < 8; bit <<= 1)
+                for (int i = 0; i < 8; i++)
                 {
-                    int j = i | bit;
-                    if (j == i || (clip[i].w > minW) == (clip[j].w > minW))
+                    if (Clip[i].w > minW)
                     {
-                        continue;
+                        Add(Clip[i], margin);
                     }
 
-                    float t = (clip[i].w - minW) / (clip[i].w - clip[j].w);
-                    Add(Vector4.Lerp(clip[i], clip[j], t));
+                    // Where a box edge crosses the eye plane.
+                    for (int bit = 1; bit < 8; bit <<= 1)
+                    {
+                        int j = i | bit;
+                        if (j == i || (Clip[i].w > minW) == (Clip[j].w > minW))
+                        {
+                            continue;
+                        }
+
+                        float t = (Clip[i].w - minW) / (Clip[i].w - Clip[j].w);
+                        Add(Vector4.Lerp(Clip[i], Clip[j], t), margin);
+                    }
                 }
+            }
+
+            ConvexHull(Points, hull);
+            return hull.Count >= 3;
+        }
+
+        // A point grown into a square of half-size `margin` (the hull of all of them is the footprint grown by margin).
+        private static void Add(Vector4 c, float margin)
+        {
+            float x = c.x / c.w, y = c.y / c.w;
+            Points.Add(new Vector2(x - margin, y - margin));
+            Points.Add(new Vector2(x + margin, y - margin));
+            Points.Add(new Vector2(x + margin, y + margin));
+            Points.Add(new Vector2(x - margin, y + margin));
+        }
+
+        // Andrew's monotone chain; counter-clockwise, no collinear points.
+        private static void ConvexHull(List<Vector2> points, List<Vector2> hull)
+        {
+            hull.Clear();
+            if (points.Count < 3)
+            {
+                return;
+            }
+
+            points.Sort((a, b) => a.x != b.x ? a.x.CompareTo(b.x) : a.y.CompareTo(b.y));
+            for (int pass = 0; pass < 2; pass++)
+            {
+                int start = hull.Count;
+                for (int k = 0; k < points.Count; k++)
+                {
+                    var p = points[pass == 0 ? k : points.Count - 1 - k];
+                    while (hull.Count >= start + 2 && Cross(hull[hull.Count - 2], hull[hull.Count - 1], p) <= 0f)
+                    {
+                        hull.RemoveAt(hull.Count - 1);
+                    }
+
+                    hull.Add(p);
+                }
+
+                hull.RemoveAt(hull.Count - 1);
+            }
+        }
+
+        private static float Cross(Vector2 o, Vector2 a, Vector2 b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+
+        // Bounding rectangle of a polygon, limited to -1..1; false if empty.
+        internal static bool Bounds(List<Vector2> polygon, out Rect ndc)
+        {
+            float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue;
+            foreach (var p in polygon)
+            {
+                x0 = Mathf.Min(x0, p.x);
+                x1 = Mathf.Max(x1, p.x);
+                y0 = Mathf.Min(y0, p.y);
+                y1 = Mathf.Max(y1, p.y);
             }
 
             x0 = Mathf.Max(x0, -1f);
             y0 = Mathf.Max(y0, -1f);
             x1 = Mathf.Min(x1, 1f);
             y1 = Mathf.Min(y1, 1f);
-            if (!any || x0 >= x1 || y0 >= y1)
-            {
-                return false;
-            }
-
             ndc = Rect.MinMaxRect(x0, y0, x1, y1);
-            return true;
+            return x0 < x1 && y0 < y1;
         }
 
         // Projection that maps the NDC rectangle onto the whole viewport: the camera then renders exactly the
