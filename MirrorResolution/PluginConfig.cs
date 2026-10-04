@@ -25,5 +25,9 @@ namespace MirrorResolution
         // Render each eye's reflection into its own texture instead of half of a shared one (fewer
         // full-surface tile loads/stores on tiled GPUs). Experimental.
         public virtual bool SplitEyes { get; set; } = false;
+
+        // Render only the part of each eye's reflection that the mirror covers on screen (nothing when the
+        // floor mirror is out of view). Same pixels where the mirror is. Experimental.
+        public virtual bool ClipToMirror { get; set; } = false;
     }
 }
