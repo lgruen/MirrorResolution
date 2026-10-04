@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 
@@ -13,21 +14,33 @@ namespace MirrorResolution
         private static readonly AccessTools.FieldRef<Mirror, MeshRenderer> MirrorRenderer =
             AccessTools.FieldRefAccess<Mirror, MeshRenderer>("_renderer");
 
+        private static readonly List<(Mirror Mirror, MeshRenderer Renderer)> Mirrors = new List<(Mirror, MeshRenderer)>();
+        private static int _listFrame = -1000;
         private static int _frame = -1;
         private static Bounds _bounds;
         private static bool _any;
 
-        // Union of the bounds of every active mirror (all mirrors in a scene share one reflection texture).
+        // Union of the bounds of every active mirror (all mirrors in a scene share one reflection texture). Looking
+        // the mirrors up scans every object, so the list is refreshed only every 90 frames.
         internal static bool MirrorBounds(out Bounds bounds)
         {
             if (Time.frameCount != _frame)
             {
                 _frame = Time.frameCount;
-                _any = false;
-                foreach (var mirror in Object.FindObjectsByType<Mirror>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+                if (_frame - _listFrame >= 90 || _frame < _listFrame)
                 {
-                    var renderer = MirrorRenderer(mirror);
-                    if (!mirror.isActiveAndEnabled || renderer == null || !renderer.enabled)
+                    _listFrame = _frame;
+                    Mirrors.Clear();
+                    foreach (var mirror in Object.FindObjectsByType<Mirror>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                    {
+                        Mirrors.Add((mirror, MirrorRenderer(mirror)));
+                    }
+                }
+
+                _any = false;
+                foreach (var (mirror, renderer) in Mirrors)
+                {
+                    if (mirror == null || !mirror.isActiveAndEnabled || renderer == null || !renderer.enabled)
                     {
                         continue;
                     }
