@@ -23,15 +23,16 @@ namespace MirrorResolution
         public virtual int AntiAliasing { get; set; } = 0;
 
         // Render each eye's reflection into its own texture instead of half of a shared one (fewer
-        // full-surface tile loads/stores on tiled GPUs). Experimental.
-        public virtual bool SplitEyes { get; set; } = false;
+        // full-surface tile loads/stores on tiled GPUs).
+        public virtual bool SplitEyes { get; set; } = true;
 
-        // Render only the part of each eye's reflection that the mirror covers on screen (nothing when the
-        // floor mirror is out of view). Same pixels where the mirror is. Experimental.
-        public virtual bool ClipToMirror { get; set; } = false;
+        // Render only the rectangle of each eye's reflection that the mirrors cover on screen, into a texture of
+        // that size (nothing when no mirror is in view). Needs SplitEyes. Same image apart from the game's dither
+        // pattern, which follows the texture size.
+        public virtual bool ClipToMirror { get; set; } = true;
 
         // Within that, keep the scene out of the pixels outside the mirrors' footprint (depth-masked before the
-        // reflection renders, so they are never shaded). Same pixels where the mirror is. Experimental.
-        public virtual bool FootprintMask { get; set; } = false;
+        // reflection renders, so they are never shaded). Identical pixels where the mirror is.
+        public virtual bool FootprintMask { get; set; } = true;
     }
 }

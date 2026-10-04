@@ -24,6 +24,7 @@ namespace MirrorResolution
         // MIRROR_MASK=far (experiment, for comparing LRZ in a trace): clear depth to near inside the pass and write the
         // far depth inside the footprint instead. MIRROR_MASK_COLOR=1: paint the masked area magenta.
         private static readonly bool Far = Environment.GetEnvironmentVariable("MIRROR_MASK") == "far";
+        private static readonly int ScreenParamsId = Shader.PropertyToID("_ScreenParams");
         private static readonly bool Show = Environment.GetEnvironmentVariable("MIRROR_MASK_COLOR") == "1";
 
         private static readonly List<Vector2> Polygon = new List<Vector2>();
@@ -52,6 +53,11 @@ namespace MirrorResolution
             {
                 buffer.SetViewport(viewport.Value);
                 ViewportBuffer.SetViewport(viewport.Value);
+                // The eye's size, not the texture's, for shaders that work in screen pixels (text edges).
+                float w = viewport.Value.width, h = viewport.Value.height;
+                var screen = new Vector4(w, h, 1f + 1f / w, 1f + 1f / h);
+                buffer.SetGlobalVector(ScreenParamsId, screen);
+                ViewportBuffer.SetGlobalVector(ScreenParamsId, screen);
             }
 
             if (footprint == null || !CreateMaterial())
