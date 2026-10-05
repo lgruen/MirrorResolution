@@ -21,6 +21,12 @@ namespace MirrorResolution
         private static int _listFrame = -1000;
         private static int _frame = -1;
 
+        static MirrorClip()
+        {
+            // A new scene (a level, with mirrors a mod may have added): look the mirrors up again on the next render.
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded += (scene, mode) => _listFrame = -1000;
+        }
+
         // World bounds of every active mirror (all mirrors in a scene share one reflection texture). Looking the
         // mirrors up scans every object, so the list is refreshed only every 90 frames.
         internal static List<Bounds> MirrorBoxes()
@@ -28,7 +34,7 @@ namespace MirrorResolution
             if (Time.frameCount != _frame)
             {
                 _frame = Time.frameCount;
-                if (_frame - _listFrame >= 90 || _frame < _listFrame)
+                if (_frame - _listFrame >= 90 || _frame < _listFrame || _listFrame < 0)
                 {
                     _listFrame = _frame;
                     Mirrors.Clear();
