@@ -15,41 +15,44 @@ namespace MirrorResolution
             AccessTools.FieldRefAccess<Mirror, MeshRenderer>("_renderer");
 
         private static readonly List<(Mirror Mirror, MeshRenderer Renderer)> Mirrors = new List<(Mirror, MeshRenderer)>();
+        private static readonly HashSet<Mirror> Known = new HashSet<Mirror>();
         private static readonly List<Bounds> Boxes = new List<Bounds>();
         private static readonly List<Vector2> Points = new List<Vector2>();
         private static readonly Vector4[] Clip = new Vector4[8];
-        private static int _listFrame = -1000;
         private static int _frame = -1;
 
-        static MirrorClip()
+        // Every enabled mirror runs Update each frame (before any camera renders) and OnWillRenderObject before its
+        // reflection is rendered; both patches below register it here. (Looking the mirrors up with
+        // FindObjectsByType instead walks all of the scene's ~15k MonoBehaviours: 5-10 ms on the main thread on the
+        // Steam Frame, which made a frame late and reprojected every time it ran.)
+        internal static void Register(Mirror mirror)
         {
-            // A new scene (a level, with mirrors a mod may have added): look the mirrors up again on the next render.
-            UnityEngine.SceneManagement.SceneManager.sceneLoaded += (scene, mode) => _listFrame = -1000;
+            if (Known.Add(mirror))
+            {
+                Mirrors.Add((mirror, MirrorRenderer(mirror)));
+                MirrorDebug.LogMirrors(Mirrors);
+            }
         }
 
-        // World bounds of every active mirror (all mirrors in a scene share one reflection texture). Looking the
-        // mirrors up scans every object, so the list is refreshed only every 90 frames.
+        // World bounds of every active mirror (all mirrors in a scene share one reflection texture).
         internal static List<Bounds> MirrorBoxes()
         {
             if (Time.frameCount != _frame)
             {
                 _frame = Time.frameCount;
-                if (_frame - _listFrame >= 90 || _frame < _listFrame || _listFrame < 0)
+                Boxes.Clear();
+                for (int i = Mirrors.Count - 1; i >= 0; i--)
                 {
-                    _listFrame = _frame;
-                    Mirrors.Clear();
-                    foreach (var mirror in Object.FindObjectsByType<Mirror>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                    var (mirror, renderer) = Mirrors[i];
+                    if (mirror == null)
                     {
-                        Mirrors.Add((mirror, MirrorRenderer(mirror)));
+                        // Destroyed (its scene was unloaded).
+                        Known.Remove(mirror!);
+                        Mirrors.RemoveAt(i);
+                        continue;
                     }
 
-                    MirrorDebug.LogMirrors(Mirrors);
-                }
-
-                Boxes.Clear();
-                foreach (var (mirror, renderer) in Mirrors)
-                {
-                    if (mirror != null && mirror.isActiveAndEnabled && renderer != null && renderer.enabled)
+                    if (mirror.isActiveAndEnabled && renderer != null && renderer.enabled)
                     {
                         Boxes.Add(renderer.bounds);
                     }
@@ -57,6 +60,18 @@ namespace MirrorResolution
             }
 
             return Boxes;
+        }
+
+        [HarmonyPatch(typeof(Mirror), "Update")]
+        private static class UpdatePatch
+        {
+            private static void Prefix(Mirror __instance) => Register(__instance);
+        }
+
+        [HarmonyPatch(typeof(Mirror), "OnWillRenderObject")]
+        private static class RenderPatch
+        {
+            private static void Prefix(Mirror __instance) => Register(__instance);
         }
 
         // Convex polygon (counter-clockwise, normalized device coordinates of the eye, may reach far outside -1..1)
