@@ -233,31 +233,25 @@ namespace MirrorResolution
             hi = lo + want;
         }
 
-        // Standard planar mirror math: reflection about the plane, oblique near plane.
+        // The standard planar mirror (as in Unity's MirrorReflection example): plane (n, d) with n.x + d = 0, reflection
+        // R = I - 2 [n; 0] [n, d]^T, and the camera's near plane moved onto the mirror (oblique projection) so that
+        // nothing behind it is drawn.
         private static Vector4 Plane(Vector3 pos, Vector3 normal) => new Vector4(normal.x, normal.y, normal.z, -Vector3.Dot(pos, normal));
 
-        private static Vector4 CameraSpacePlane(Matrix4x4 worldToCamera, Vector3 pos, Vector3 normal)
-        {
-            Vector3 p = worldToCamera.MultiplyPoint(pos);
-            Vector3 n = worldToCamera.MultiplyVector(normal).normalized;
-            return Plane(p, n);
-        }
+        private static Vector4 CameraSpacePlane(Matrix4x4 worldToCamera, Vector3 pos, Vector3 normal) =>
+            Plane(worldToCamera.MultiplyPoint(pos), worldToCamera.MultiplyVector(normal).normalized);
 
         private static Matrix4x4 ReflectionMatrix(Vector4 plane)
         {
             Matrix4x4 m = Matrix4x4.identity;
-            m.m00 = 1f - 2f * plane[0] * plane[0];
-            m.m01 = -2f * plane[0] * plane[1];
-            m.m02 = -2f * plane[0] * plane[2];
-            m.m03 = -2f * plane[3] * plane[0];
-            m.m10 = -2f * plane[1] * plane[0];
-            m.m11 = 1f - 2f * plane[1] * plane[1];
-            m.m12 = -2f * plane[1] * plane[2];
-            m.m13 = -2f * plane[3] * plane[1];
-            m.m20 = -2f * plane[2] * plane[0];
-            m.m21 = -2f * plane[2] * plane[1];
-            m.m22 = 1f - 2f * plane[2] * plane[2];
-            m.m23 = -2f * plane[3] * plane[2];
+            for (int row = 0; row < 3; row++)
+            {
+                for (int column = 0; column < 4; column++)
+                {
+                    m[row, column] -= 2f * plane[row] * plane[column];
+                }
+            }
+
             return m;
         }
     }
