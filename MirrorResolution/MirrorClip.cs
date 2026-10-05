@@ -36,6 +36,8 @@ namespace MirrorResolution
                     {
                         Mirrors.Add((mirror, MirrorRenderer(mirror)));
                     }
+
+                    MirrorDebug.LogMirrors(Mirrors);
                 }
 
                 Boxes.Clear();

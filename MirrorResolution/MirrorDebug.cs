@@ -87,6 +87,41 @@ namespace MirrorResolution
             return _audio == null ? -1f : _audio.songTime - _audio.startSongTime;
         }
 
+        // MIRROR_DEBUG=1: logs the scene's Mirror components (the first few lookups after a level starts).
+        private static int _mirrorLogs;
+        private static string? _mirrorScene;
+
+        internal static void LogMirrors(System.Collections.Generic.List<(Mirror Mirror, MeshRenderer Renderer)> mirrors)
+        {
+            string scene = string.Join(",", mirrors.ConvertAll(m => m.Mirror != null ? m.Mirror.gameObject.scene.name : "?"));
+            if (!Enabled || (scene == _mirrorScene && _mirrorLogs >= 3))
+            {
+                return;
+            }
+
+            _mirrorLogs = scene == _mirrorScene ? _mirrorLogs + 1 : 1;
+            _mirrorScene = scene;
+            Plugin.Log.Info($"MIRRORDBG {mirrors.Count} Mirror components at frame {Time.frameCount}");
+            foreach (var (mirror, renderer) in mirrors)
+            {
+                if (mirror == null)
+                {
+                    continue;
+                }
+
+                var t = mirror.transform;
+                string path = t.name;
+                for (var p = t.parent; p != null; p = p.parent)
+                {
+                    path = p.name + "/" + path;
+                }
+
+                Plugin.Log.Info($"MIRRORDBG   '{path}' scene={mirror.gameObject.scene.name} active={mirror.isActiveAndEnabled} " +
+                                $"renderer={(renderer != null ? $"{renderer.enabled} bounds={renderer.bounds.center}/{renderer.bounds.size}" : "none")} " +
+                                $"up={t.up} pos={t.position}");
+            }
+        }
+
         // Logs the rendered rectangle and the footprint polygons (grown by the margin, and exact) in pixels of the
         // eye's full reflection (origin bottom left).
         internal static void LogFootprint(string eye, int px0, int py0, int px1, int py1, int width, int height,
