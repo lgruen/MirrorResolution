@@ -24,6 +24,10 @@ namespace MirrorResolution
 
         private static readonly List<Vector2> Hull = new List<Vector2>();
 
+        // Testing: true renders as with ClipToMirror and FootprintMask off (for A/B screenshots of the whole view, e.g.
+        // the bench harness's BENCH_SHOT_AB=<s>,MirrorResolution.MirrorSplit:Plain,<frames>,freeze).
+        internal static bool Plain;
+
         private static bool Prefix(Vector3 __0, Quaternion __1, Matrix4x4 __2, Rect __3, Vector3 __4, Vector3 __5, Camera ____mirrorCamera)
         {
             var config = PluginConfig.Instance;
@@ -38,8 +42,8 @@ namespace MirrorResolution
 
             bool split = config.SplitEyes && Mathf.Abs(screenRect.width - 0.5f) <= 0.01f && target.antiAliasing <= 1;
             // ClipToMirror needs its own texture per eye (SplitEyes).
-            bool clip = config.ClipToMirror && split;
-            bool mask = config.FootprintMask;
+            bool clip = config.ClipToMirror && split && !Plain;
+            bool mask = config.FootprintMask && !Plain;
             if (!split && !clip && !mask)
             {
                 return true;
