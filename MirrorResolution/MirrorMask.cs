@@ -25,6 +25,10 @@ namespace MirrorResolution
         // far depth inside the footprint instead. MIRROR_MASK_COLOR=1: paint the masked area magenta.
         private static readonly bool Far = Environment.GetEnvironmentVariable("MIRROR_MASK") == "far";
         private static readonly int ScreenParamsId = Shader.PropertyToID("_ScreenParams");
+        // The game's blue-noise dither: its tiling (camera pixel size / noise texture size) is set as a global before
+        // each camera renders, from the camera's pixel size, i.e. the clipped texture's.
+        private static readonly int BlueNoiseParamsId = Shader.PropertyToID("_GlobalBlueNoiseParams");
+        private static readonly int BlueNoiseTexId = Shader.PropertyToID("_GlobalBlueNoiseTex");
         private static readonly bool Show = Environment.GetEnvironmentVariable("MIRROR_MASK_COLOR") == "1";
 
         private static readonly List<Vector2> Polygon = new List<Vector2>();
@@ -58,6 +62,15 @@ namespace MirrorResolution
                 var screen = new Vector4(w, h, 1f + 1f / w, 1f + 1f / h);
                 buffer.SetGlobalVector(ScreenParamsId, screen);
                 ViewportBuffer.SetGlobalVector(ScreenParamsId, screen);
+                // The dither tiled over the eye's size too; else it is stretched by eye size / texture size (vertical
+                // streaks when only the platform's mirror is in view and the texture is 128 px high).
+                var noise = Shader.GetGlobalTexture(BlueNoiseTexId);
+                if (noise != null && noise.width > 0 && noise.height > 0)
+                {
+                    var tiling = new Vector4(w / noise.width, h / noise.height, 0f, 0f);
+                    buffer.SetGlobalVector(BlueNoiseParamsId, tiling);
+                    ViewportBuffer.SetGlobalVector(BlueNoiseParamsId, tiling);
+                }
             }
 
             if (footprint == null || !CreateMaterial())
