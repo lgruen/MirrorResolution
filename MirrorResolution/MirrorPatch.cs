@@ -11,6 +11,9 @@ namespace MirrorResolution
     internal static class MirrorPatch
     {
         private static int _gameAntiAliasing = -1;
+        // The size this patch last wrote, and the game's own (from the preset) before that, to put back when disabled.
+        private static int _writtenWidth = -1, _writtenHeight = -1;
+        private static int _gameWidth, _gameHeight;
         private static int _loggedWidth;
         private static int _loggedHeight;
         private static int _loggedAa;
@@ -19,12 +22,31 @@ namespace MirrorResolution
         private static void Prefix(Camera currentCamera, ref int ____stereoTextureWidth, ref int ____stereoTextureHeight, ref int ____antialiasing)
         {
             var config = PluginConfig.Instance;
-            // Off/Low presets use 2x2 placeholders; leave those alone.
-            if (_gameAntiAliasing >= 0 && !config.Enabled)
+            bool ours = ____stereoTextureWidth == _writtenWidth && ____stereoTextureHeight == _writtenHeight;
+            if (!ours)
             {
-                ____antialiasing = _gameAntiAliasing;
+                // The game's size (first call, or the preset changed since).
+                _gameWidth = ____stereoTextureWidth;
+                _gameHeight = ____stereoTextureHeight;
             }
 
+            if (!config.Enabled)
+            {
+                // Turned off while running: back to the game's size and MSAA.
+                if (ours)
+                {
+                    ____stereoTextureWidth = _gameWidth;
+                    ____stereoTextureHeight = _gameHeight;
+                    _writtenWidth = _writtenHeight = -1;
+                }
+
+                if (_gameAntiAliasing >= 0)
+                {
+                    ____antialiasing = _gameAntiAliasing;
+                }
+            }
+
+            // Off/Low presets use 2x2 placeholders; leave those alone.
             if (!config.Enabled || currentCamera == null || !currentCamera.stereoEnabled || ____stereoTextureHeight <= 2)
             {
                 return;
@@ -51,8 +73,8 @@ namespace MirrorResolution
 
             int width = 2 * Mathf.Max(1, perEyeWidth);
             int height = Mathf.Max(1, perEyeHeight);
-            ____stereoTextureWidth = width;
-            ____stereoTextureHeight = height;
+            ____stereoTextureWidth = _writtenWidth = width;
+            ____stereoTextureHeight = _writtenHeight = height;
 
             // _antialiasing is only computed in Awake; remember the game's value so it can be restored.
             if (_gameAntiAliasing < 0)
