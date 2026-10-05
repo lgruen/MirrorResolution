@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>MirrorResolution</AssemblyName>
     <RootNamespace>MirrorResolution</RootNamespace>
-    <Version>0.4.1</Version>
+    <Version>0.4.2</Version>
     <EnableFrameworkPathOverride>true</EnableFrameworkPathOverride>
     <FrameworkPathOverride>$(BeatSaberDir)/Beat Saber_Data/Managed</FrameworkPathOverride>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
