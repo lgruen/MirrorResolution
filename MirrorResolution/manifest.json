@@ -2,9 +2,13 @@
   "$schema": "https://raw.githubusercontent.com/nike4613/ModSaber-MetadataFileSchema/master/Schema.json",
   "id": "MirrorResolution",
   "name": "MirrorResolution",
-  "author": "MirrorResolution contributors",
-  "version": "0.4.0",
-  "description": "Renders the Medium/High mirror at the headset's eye resolution (times a scale) instead of the fixed 1200x1000 / 600x500 per eye.",
+  "author": "lgruen",
+  "version": "0.4.1",
+  "description": "Floor mirror at eye resolution, rendered per eye and only where the mirror is seen: cheaper on tiled ARM64 GPUs (bs-arm64 on the Steam Frame).",
   "gameVersion": "1.44.1",
-  "dependsOn": { "BSIPA": "^4.3.7" }
+  "dependsOn": { "BSIPA": "^4.3.7" },
+  "links": {
+    "project-home": "https://github.com/lgruen/MirrorResolution",
+    "project-source": "https://github.com/lgruen/MirrorResolution"
+  }
 }

@@ -13,11 +13,11 @@ namespace MirrorResolution
         public virtual bool Enabled { get; set; } = true;
 
         // Mirror size per eye as a fraction of the eye texture size (1.0 = same as the eye buffer).
-        public virtual float Scale { get; set; } = 1.0f;
+        public virtual float Scale { get; set; } = 0.75f;
 
         // Upper limit for the mirror's per-eye width and height in pixels; 0 = no limit. Keeps the
         // mirror's cost fixed when the eye resolution is raised.
-        public virtual int MaxPerEye { get; set; } = 0;
+        public virtual int MaxPerEye { get; set; } = 1620;
 
         // MSAA samples for the mirror (1, 2, 4, 8); 0 keeps the game's value (2 on Medium/High).
         public virtual int AntiAliasing { get; set; } = 0;
